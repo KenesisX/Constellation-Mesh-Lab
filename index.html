@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Constellation Mesh Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* layout: instrument bench. Control rail on the left, readouts on the right, one bench per tab. */
+  --bg:#eef1f6;--panel:#fbfcfe;--ink:#141b2b;--muted:#5a657c;--line:#cfd6e3;
+  --accent:#1f4fd8;--trace2:#b45f06;--good:#1a7f4b;--warn:#a06c00;--crit:#c0362c;
+  --display:'Chakra Petch','Trebuchet MS',sans-serif;
+  --body:'IBM Plex Sans',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){color-scheme:dark;
+    --bg:#0f141d;--panel:#171e2b;--ink:#e6ebf5;--muted:#93a0b8;--line:#2a3447;
+    --accent:#7aa2ff;--trace2:#f0b35a;--good:#4cc38a;--warn:#e5b84a;--crit:#f07a6e}
+}
+:root[data-theme="dark"]{color-scheme:dark;
+  --bg:#0f141d;--panel:#171e2b;--ink:#e6ebf5;--muted:#93a0b8;--line:#2a3447;
+  --accent:#7aa2ff;--trace2:#f0b35a;--good:#4cc38a;--warn:#e5b84a;--crit:#f07a6e}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--body)}
+header{padding:18px 20px 0;display:flex;flex-direction:column;gap:12px}
+h1{font:600 1.5rem/1.1 var(--display);margin:0;letter-spacing:.01em}
+header p{margin:4px 0 0;color:var(--muted);max-width:65ch}
+nav{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line)}
+nav button{font:500 .92rem var(--display);background:none;border:0;border-bottom:3px solid transparent;color:var(--muted);padding:9px 14px;cursor:pointer}
+nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+main{padding:16px 20px 40px}
+.tab{display:none}
+.tab.on{display:grid;grid-template-columns:270px minmax(0,1fr);gap:16px;align-items:start}
+.tab.on.full{grid-template-columns:minmax(0,1fr)}
+.rail,.card{background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.rail{padding:14px;display:flex;flex-direction:column;gap:11px}
+.rail h2,.card h2{font:600 .78rem var(--display);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0}
+.bench{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px;min-width:0}
+.card{padding:12px 14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.wide{grid-column:1/-1}
+canvas{width:100%;height:210px;display:block;border-radius:3px;touch-action:none}
+canvas.tall{height:380px}
+canvas.short{height:150px}
+.ctl label{display:flex;justify-content:space-between;gap:8px;font-size:.84rem;color:var(--muted)}
+.ctl output{font-family:var(--mono);color:var(--ink);font-variant-numeric:tabular-nums}
+.ctl input[type=range]{width:100%;accent-color:var(--accent);margin:2px 0 0}
+.ctl select{width:100%;padding:6px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:4px;font:inherit}
+.ctl .chk{justify-content:flex-start;color:var(--ink)}
+.ctl input[type=text],.ctl input[type=number],.ctl input[type=file],.send input{width:100%;padding:6px 8px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:4px;font:inherit;min-width:0}
+.msgs{min-height:170px;max-height:300px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.bub{max-width:88%;padding:6px 10px;border-radius:10px;border:1px solid var(--line);overflow-wrap:anywhere;align-self:flex-start}
+.bub.out{align-self:flex-end;border-color:var(--accent)}
+.bub small{display:block;color:var(--muted);font:.7rem var(--mono)}
+.send{display:flex;gap:8px}.send input{flex:1 1 auto}.send button.act{width:auto;flex:none;padding:8px 18px}
+#airTable td:last-child,#airTable th:last-child{text-align:left;white-space:normal;min-width:14ch}
+input:disabled{opacity:.5}
+.chk input{accent-color:var(--accent)}
+button.act,.ctl button{width:100%;font:500 .88rem var(--display);padding:8px 10px;border-radius:4px;border:1px solid var(--accent);background:var(--accent);color:var(--panel);cursor:pointer}
+.ctl button.ghost{background:none;color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--trace2);outline-offset:2px}
+.meas{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:8px}
+.m{border-left:3px solid var(--line);padding:3px 10px}
+.m b{display:block;font:500 1.05rem var(--mono);font-variant-numeric:tabular-nums}
+.m span{font-size:.78rem;color:var(--muted)}
+.m small{display:block;font-size:.72rem;color:var(--muted)}
+.m.good{border-left-color:var(--good)}.m.warn{border-left-color:var(--warn)}.m.crit{border-left-color:var(--crit)}
+.scroll{overflow:auto;max-height:260px}
+table{border-collapse:collapse;width:100%;font:.8rem var(--mono);font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:3px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--panel);color:var(--muted);font-weight:500}
+td:first-child,th:first-child{text-align:left}
+.pill{display:inline-block;padding:0 7px;border-radius:9px;border:1px solid currentColor;font-size:.72rem}
+.pill.good{color:var(--good)}.pill.warn{color:var(--warn)}.pill.crit{color:var(--crit)}
+.note{font-size:.82rem;color:var(--muted);margin:0;max-width:75ch}
+.agents{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px}
+.ag{border:1px solid var(--line);border-radius:4px;padding:8px 10px}
+.ag b{font:600 .85rem var(--display)}
+.ag p{margin:3px 0 0;font:.76rem/1.35 var(--mono);color:var(--muted);min-height:3.1em;overflow-wrap:anywhere}
+.log{font:.76rem/1.5 var(--mono);max-height:200px;overflow:auto;white-space:pre-wrap;color:var(--muted)}
+.prose{max-width:75ch}
+.prose h3{font:600 1rem var(--display);margin:14px 0 4px}
+.prose p,.prose li{margin:4px 0}
+code{font:.85em var(--mono);background:var(--bg);padding:1px 4px;border-radius:3px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.76rem;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+@media (max-width:820px){.tab.on{grid-template-columns:minmax(0,1fr)}header,main{padding-left:16px;padding-right:16px}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Constellation Mesh Lab</h1>
+    <p>A radio bench: signal measurements, numbered packets and the gaps between them, a working frame modem with encrypted messaging, learned waveforms, a multi-frequency mesh, and agents in a feedback loop. The radio channel is emulated here and live through the local bridge.</p>
+  </div>
+  <nav id="tabs" role="tablist"></nav>
+</header>
+<main>
+
+<section id="signal" class="tab">
+  <div class="rail"><h2>Signal and channel</h2><div id="sigCtl" class="rail" style="border:0;padding:0"></div></div>
+  <div class="bench">
+    <div class="card"><h2>Spectrum, dB per bin</h2><canvas id="cSpec"></canvas></div>
+    <div class="card"><h2>Waterfall, newest at top</h2><canvas id="cWf"></canvas></div>
+    <div class="card"><h2>Constellation</h2><canvas id="cCon"></canvas>
+      <div class="legend"><span><i style="background:var(--accent)"></i>received symbols</span><span><i style="background:var(--trace2)"></i>ideal points</span></div></div>
+    <div class="card"><h2>I and Q, first 300 samples</h2><canvas id="cTime"></canvas></div>
+    <div class="card wide"><h2>Measurements from this capture</h2><div id="sigMeas" class="meas"></div></div>
+  </div>
+</section>
+
+<section id="packets" class="tab">
+  <div class="rail"><h2>Packet stream</h2><div id="pkCtl" class="rail" style="border:0;padding:0"></div></div>
+  <div class="bench">
+    <div class="card wide"><h2>Receiver findings</h2><div id="pkMeas" class="meas"></div></div>
+    <div class="card wide"><h2>Packet power and gap noise floor, dBm by serial number</h2><canvas id="cPk"></canvas>
+      <div class="legend"><span><i style="background:var(--accent)"></i>packet RSSI</span><span><i style="background:var(--trace2)"></i>noise floor in the gap before it</span><span><i style="background:var(--crit)"></i>lost packet, found by a missing serial</span></div></div>
+    <div class="card"><h2>Interval between arrivals, ms</h2><canvas id="cPkInt"></canvas></div>
+    <div class="card"><h2>Per-packet log</h2><div class="scroll"><table id="pkTable"></table></div></div>
+  </div>
+</section>
+
+<section id="modem" class="tab">
+  <div class="rail"><h2>Frame modem</h2><div id="moCtl" class="rail" style="border:0;padding:0"></div>
+    <div class="ctl"><label for="oText">Payload text for one frame</label><input type="text" id="oText" value="Serial-numbered frame from Constellation Mesh Lab" autocomplete="off"></div>
+    <p class="note" id="lkStatus"></p>
+    <h2>Decode an IQ recording</h2>
+    <div class="ctl"><label for="oFmt">Sample format</label><select id="oFmt"><option value="cf32">cf32 (bridge recording, GNU Radio)</option><option value="cu8">cu8 (rtl_sdr)</option><option value="cs8">cs8 (hackrf_transfer)</option><option value="cs16">cs16</option></select></div>
+    <div class="ctl"><label for="oRate">Sample rate, Hz</label><input type="number" id="oRate" value="250000" min="1000"></div>
+    <div class="ctl"><label for="oFile">Recording file</label><input type="file" id="oFile"></div>
+    <p class="note" id="oFileMsg">Finds and decodes this lab's frames in a capture. The file stays in your browser.</p></div>
+  <div class="bench">
+    <div class="card wide"><h2>Transmit pipeline, last frame</h2><div id="moTx" class="meas"></div></div>
+    <div class="card wide"><h2>Receiver, last frame</h2><div id="moRx" class="meas"></div></div>
+    <div class="card"><h2>Received samples, magnitude over ms</h2><canvas id="cBurst"></canvas></div>
+    <div class="card"><h2>Payload symbols after sync</h2><canvas id="cMod"></canvas></div>
+    <div class="card wide"><h2>Decoded frames, newest first</h2><div class="scroll"><table id="moTable"></table></div></div>
+  </div>
+</section>
+
+<section id="messages" class="tab">
+  <div class="rail"><h2>Secure link</h2><div id="msCtl" class="rail" style="border:0;padding:0"></div>
+    <div class="ctl"><label for="sPass">Shared passphrase, 12 characters or more</label><input type="text" id="sPass" autocomplete="off"></div>
+    <p class="note" id="msNote"></p>
+    <p class="note">Messages are encrypted before they reach the modem and decrypted after the frame check. The channel, modulation and SNR come from the Modem tab.</p></div>
+  <div class="bench">
+    <div class="card wide"><h2>Link security</h2><div id="msMeas" class="meas"></div></div>
+    <div class="card"><h2 id="chT1">Station 1</h2><div class="msgs" id="ch1"></div><form id="f1" class="send"><input type="text" id="in1" placeholder="Message to station 2" autocomplete="off" aria-label="Message from station 1"><button class="act" type="submit">Send</button></form></div>
+    <div class="card"><h2 id="chT2">Station 2</h2><div class="msgs" id="ch2"></div><form id="f2" class="send"><input type="text" id="in2" placeholder="Message to station 1" autocomplete="off" aria-label="Message from station 2"><button class="act" type="submit">Send</button></form></div>
+    <div class="card wide"><h2>What is on the air, newest first</h2><div class="scroll"><table id="airTable"></table></div></div>
+  </div>
+</section>
+
+<section id="waveform" class="tab">
+  <div class="rail"><h2>Channel autoencoder</h2><div id="aeCtl" class="rail" style="border:0;padding:0"></div>
+    <p class="note">The transmitter learns where to put its points. The receiver is a small neural network. Both train together through the simulated channel, in this page.</p></div>
+  <div class="bench">
+    <div class="card wide"><h2>Training status</h2><div id="aeMeas" class="meas"></div></div>
+    <div class="card"><h2>Constellation at the transmitter</h2><canvas id="cAe" class="tall"></canvas>
+      <div class="legend"><span><i style="background:var(--accent)"></i>learned</span><span><i style="background:var(--trace2)"></i>standard baseline</span></div></div>
+    <div class="card"><h2>Symbol error rate against SNR</h2><canvas id="cSer" class="tall"></canvas>
+      <div class="legend"><span><i style="background:var(--accent)"></i>learned, ideal detector</span><span><i style="background:var(--trace2)"></i>baseline, ideal detector</span></div></div>
+    <div class="card wide"><h2>Training loss</h2><canvas id="cLoss" class="short"></canvas></div>
+  </div>
+</section>
+
+<section id="mesh" class="tab">
+  <div class="rail"><h2>Mesh</h2><div id="meCtl" class="rail" style="border:0;padding:0"></div>
+    <p class="note">Drag nodes to move them. Click one to select it. Squares are masters that decode and regenerate. Circles are workers that amplify and forward raw signal.</p></div>
+  <div class="bench">
+    <div class="card wide"><h2>Field, 1000 m by 600 m</h2><canvas id="cMesh" class="tall"></canvas></div>
+    <div class="card wide"><h2>End-to-end throughput</h2><div id="meMeas" class="meas"></div></div>
+    <div class="card"><h2 id="csiTitle">Channel state on a hop</h2><canvas id="cCsi"></canvas>
+      <div class="legend"><span><i style="background:var(--accent)"></i>channel gain per subcarrier, dB</span><span><i style="background:var(--trace2)"></i>water-filled power</span></div>
+      <div id="csiMeas" class="meas"></div></div>
+    <div class="card"><h2>Delivered packets and their metadata</h2><div class="scroll"><table id="meTable"></table></div></div>
+  </div>
+</section>
+
+<section id="agents" class="tab">
+  <div class="rail"><h2>Agent loop</h2><div id="agCtl" class="rail" style="border:0;padding:0"></div>
+    <p class="note">Six agents share one blackboard. Each round they act on what the others posted last round. The route comes from the Mesh tab.</p></div>
+  <div class="bench">
+    <div class="card wide"><h2>Agents against a fixed plan</h2><div id="agMeas" class="meas"></div></div>
+    <div class="card wide"><h2>Agents</h2><div id="agCards" class="agents"></div></div>
+    <div class="card"><h2>Interference by channel, last 60 rounds</h2><canvas id="cOcc"></canvas>
+      <div class="legend"><span><i style="background:var(--crit)"></i>interference</span><span><i style="background:var(--accent)"></i>channel the agents chose for a hop</span></div></div>
+    <div class="card"><h2>Throughput per round, Mbit/s</h2><canvas id="cAg"></canvas>
+      <div class="legend"><span><i style="background:var(--accent)"></i>agents</span><span><i style="background:var(--trace2)"></i>fixed plan</span></div></div>
+    <div class="card wide"><h2>Blackboard log</h2><div id="agLog" class="log"></div></div>
+  </div>
+</section>
+
+<section id="hardware" class="tab full">
+  <div class="card prose">
+    <h2>Taking this to hardware</h2>
+    <h3>What is real here and what is simulated</h3>
+    <p>The math is real: the filters, FFT, measurements, the neural network training, the routing and the water-filling all run as shown. The Modem and Messages tabs build real frames, sample by sample, and really encrypt. Opened here, they pass through an emulated channel. Opened through the local bridge, the same samples go to and from your radio.</p>
+    <h3>Going on the air with the bridge</h3>
+    <ul>
+      <li>Download the bundle, run <code>python3 bridge.py --loopback</code>, and open the address it prints. The Modem tab switches to Radio bridge by itself.</li>
+      <li>The bridge carries raw IQ over UDP or through any command-line radio program, such as <code>rtl_sdr</code> for receive and <code>hackrf_transfer</code> for transmit. The README in the bundle has the commands.</li>
+      <li>A HackRF One cannot transmit and receive at once. A two-way link needs a receive radio and a transmit radio at each station.</li>
+      <li>The receiver locks to offsets up to about 1/64 of the sample rate. Cheap oscillators can be further off than that at 915 MHz, so read the offset on the Modem tab and correct it with the bridge's <code>--rx-shift</code>.</li>
+    </ul>
+    <h3>About the encryption</h3>
+    <ul>
+      <li>AES-256-GCM has 2^256 possible keys. No cipher offers 256^256, and stacking home-made matrix ciphers on top would add weakness, not strength.</li>
+      <li>Keys come from an elliptic-curve exchange (P-521 where the browser has it) or a shared passphrase. Every message gets its own key, so one captured key does not open earlier messages.</li>
+      <li>The serial number, sender and receiver stay readable so any receiver can still count and measure packets. They are authenticated, so changing them breaks the message.</li>
+      <li>This design has not had an independent security review. Treat it as a strong prototype, not a certified product.</li>
+      <li>Encrypted traffic is not allowed on amateur bands under FCC Part 97. Use ISM bands under Part 15.</li>
+    </ul>
+    <h3>What each class of hardware can measure</h3>
+    <div class="scroll" style="max-height:none"><table>
+      <tr><th>Hardware</th><th>Gives you</th><th>Role in this design</th></tr>
+      <tr><td>ESP32 (Wi-Fi, ESP-NOW)</td><td>RSSI, noise floor, per-subcarrier CSI, microsecond timestamps</td><td>Worker</td></tr>
+      <tr><td>LoRa SX126x / SX127x</td><td>RSSI, SNR, frequency error, time on air</td><td>Worker, long range</td></tr>
+      <tr><td>nRF52 (BLE)</td><td>RSSI, channel index, timestamps, direction-finding IQ on some parts</td><td>Worker</td></tr>
+      <tr><td>RTL-SDR</td><td>Raw IQ, receive only, about 2.4 MHz wide</td><td>Scanner input</td></tr>
+      <tr><td>PlutoSDR, HackRF, LimeSDR</td><td>Raw IQ, transmit and receive: every measurement on the Signal tab</td><td>Master radio</td></tr>
+      <tr><td>Pi 5, Jetson, laptop</td><td>Compute for decoding, training and the agents</td><td>Master processor</td></tr>
+    </table></div>
+    <h3>Worker and master split</h3>
+    <p>Workers do the fast, simple jobs: capture, timestamp, measure power in and between packets, forward. The master does the slow, heavy jobs: combining what the workers heard, decoding, training the waveform, planning channels and routes. Every packet carries a serial number plus a small metadata block (SNR, CSI summary, modulation guess) so the master can learn from the link itself, not only the payload.</p>
+    <h3>From the learned-waveform notes</h3>
+    <ul>
+      <li>The Waveform tab is the channel autoencoder: learned transmitter, differentiable channel model, learned receiver.</li>
+      <li>Turn on the power amplifier model there to see the transmitter move points away from the compression zone.</li>
+      <li>Not built yet: pilotless reception, over-the-air training with a feedback link, and running the network at full sample rate on an FPGA or NPU. Those need real radios.</li>
+      <li>A waveform trained on this simulated channel will not transfer to a real one without retraining on captured data.</li>
+    </ul>
+    <h3>Before transmitting</h3>
+    <p>Keep tests inside FCC Part 15 power limits on ISM bands, or Part 97 on amateur bands with encryption off, and only relay your own protocol's packets between your own devices.</p>
+  </div>
+</section>
+</main>
+
+<script src="modem.js"></script>
+<script src="secure.js"></script>
+<script>
+//CORE-START
+const Core=(()=>{
+function rng(seed){let a=seed>>>0;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function gauss(r){let u=0;while(u<1e-12)u=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*r())}
+function fft(re,im){const n=re.length;
+  for(let i=1,j=0;i<n;i++){let b=n>>1;for(;j&b;b>>=1)j^=b;j^=b;if(i<j){let t=re[i];re[i]=re[j];re[j]=t;t=im[i];im[i]=im[j];im[j]=t}}
+  for(let len=2;len<=n;len<<=1){const ang=-2*Math.PI/len,wr=Math.cos(ang),wi=Math.sin(ang);
+    for(let i=0;i<n;i+=len){let cr=1,ci=0;for(let k=0;k<len/2;k++){const a=i+k,b=a+len/2;
+      const xr=re[b]*cr-im[b]*ci,xi=re[b]*ci+im[b]*cr;re[b]=re[a]-xr;im[b]=im[a]-xi;re[a]+=xr;im[a]+=xi;
+      const t=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=t}}}}
+function norm(pts){let p=0;for(const q of pts)p+=q[0]*q[0]+q[1]*q[1];p=Math.sqrt(p/pts.length);return pts.map(q=>[q[0]/p,q[1]/p])}
+function constel(name){let pts=[];
+  if(name==='BPSK')pts=[[-1,0],[1,0]];
+  else if(name==='QPSK')pts=[[1,1],[-1,1],[-1,-1],[1,-1]];
+  else if(name==='8PSK')for(let i=0;i<8;i++)pts.push([Math.cos(i*Math.PI/4),Math.sin(i*Math.PI/4)]);
+  else{const m=name==='16QAM'?4:8;for(let a=0;a<m;a++)for(let b=0;b<m;b++)pts.push([2*a-m+1,2*b-m+1])}
+  return norm(pts)}
+function rrc(beta,sps,span){const N=span*sps,h=[];
+  for(let i=0;i<=N;i++){const t=(i-N/2)/sps;let v;
+    if(Math.abs(t)<1e-9)v=1-beta+4*beta/Math.PI;
+    else if(Math.abs(Math.abs(4*beta*t)-1)<1e-9)v=beta/Math.SQRT2*((1+2/Math.PI)*Math.sin(Math.PI/(4*beta))+(1-2/Math.PI)*Math.cos(Math.PI/(4*beta)));
+    else v=(Math.sin(Math.PI*t*(1-beta))+4*beta*t*Math.cos(Math.PI*t*(1+beta)))/(Math.PI*t*(1-(4*beta*t)**2));
+    h.push(v)}
+  let e=0;for(const v of h)e+=v*v;e=Math.sqrt(e);return h.map(v=>v/e)}
+// Rapp amplifier model on unit-power input, smoothness p=2. Returns gain s and ds/du for u=|x|^2.
+function rapp(u,A2){const q=(u/A2)*(u/A2),s=Math.pow(1+q,-0.25);return[s,-0.5*(u/A2)/A2*Math.pow(1+q,-1.25)]}
+
+function simulate(p){
+  const r=rng(p.seed),pts=p.pts||constel(p.mod),M=pts.length,sps=p.sps,h=rrc(.35,sps,8),L=h.length;
+  const idx=new Int32Array(p.nsym);for(let i=0;i<p.nsym;i++)idx[i]=Math.floor(r()*M);
+  const n=p.nsym*sps+L;let xr=new Float64Array(n),xi=new Float64Array(n);
+  for(let k=0;k<p.nsym;k++){const a=pts[idx[k]],o=k*sps;for(let j=0;j<L;j++){xr[o+j]+=a[0]*h[j];xi[o+j]+=a[1]*h[j]}}
+  if(p.pa){const A2=Math.pow(10,p.backoff/10);for(let k=0;k<n;k++){const s=rapp((xr[k]*xr[k]+xi[k]*xi[k])*sps,A2)[0];xr[k]*=s;xi[k]*=s}}
+  if(p.echo>-39.5){const a=Math.pow(10,p.echo/20),cr=a*Math.cos(2.1),ci=a*Math.sin(2.1),d=p.echoDelay,yr=new Float64Array(n),yi=new Float64Array(n);
+    for(let k=0;k<n;k++){yr[k]=xr[k];yi[k]=xi[k];if(k>=d){yr[k]+=xr[k-d]*cr-xi[k-d]*ci;yi[k]+=xr[k-d]*ci+xi[k-d]*cr}}xr=yr;xi=yi}
+  const sig=Math.sqrt(Math.pow(10,-p.snr/10)/2),w=2*Math.PI*p.cfo/p.fs,gI=Math.pow(10,p.iqGain/20),ph=p.iqPhase*Math.PI/180,sp=Math.sin(ph),cp=Math.cos(ph);
+  let th=0;const re=new Float64Array(n),im=new Float64Array(n);
+  for(let k=0;k<n;k++){th+=gauss(r)*p.pn;const c=Math.cos(w*k+th),s=Math.sin(w*k+th);
+    const a=xr[k]*c-xi[k]*s+gauss(r)*sig,b=xr[k]*s+xi[k]*c+gauss(r)*sig;
+    re[k]=gI*a;im[k]=sp*a+cp*b}
+  return{re,im,idx,pts,h,sps}}
+
+function classify(yr,yi,s2){const n=yr.length;let m2=0,cr=0,ci=0,m4=0;
+  for(let k=0;k<n;k++){const a=yr[k]*yr[k]+yi[k]*yi[k];m2+=a;m4+=a*a;cr+=yr[k]*yr[k]-yi[k]*yi[k];ci+=2*yr[k]*yi[k]}
+  m2/=n;m4/=n;cr/=n;ci/=n;const ps=Math.max(1e-9,m2-s2),c20=Math.hypot(cr,ci)/ps,c42=(m4-(cr*cr+ci*ci)-2*m2*m2)/(ps*ps);
+  if(c20>.5)return{label:'BPSK',c20,c42,margin:c20-.5};
+  const cand=[['QPSK',-1],['16QAM',-.68],['64QAM',-.619]].map(c=>[c[0],Math.abs(c42-c[1])]).sort((a,b)=>a[1]-b[1]);
+  return{label:cand[0][0],c20,c42,margin:cand[1][1]-cand[0][1]}}
+
+function measure(sig,p){
+  const{re,im,idx,pts,h,sps}=sig,n=re.length,ns=idx.length,L=h.length;
+  let pw=0,pk=0,ii=0,qq=0,iq=0;
+  for(let k=0;k<n;k++){const a=re[k]*re[k]+im[k]*im[k];pw+=a;if(a>pk)pk=a;ii+=re[k]*re[k];qq+=im[k]*im[k];iq+=re[k]*im[k]}
+  pw/=n;
+  const N=512,psd=new Float64Array(N),win=new Float64Array(N);let ws=0,segs=0;
+  for(let i=0;i<N;i++){win[i]=.5-.5*Math.cos(2*Math.PI*i/(N-1));ws+=win[i]*win[i]}
+  for(let o=0;o+N<=n;o+=N/2){const a=new Float64Array(N),b=new Float64Array(N);for(let i=0;i<N;i++){a[i]=re[o+i]*win[i];b[i]=im[o+i]*win[i]}
+    fft(a,b);for(let i=0;i<N;i++)psd[(i+N/2)%N]+=(a[i]*a[i]+b[i]*b[i])/ws;segs++}
+  let tot=0;for(let i=0;i<N;i++){psd[i]/=segs*N;tot+=psd[i]}
+  let lo=0,hi=N-1,acc=0;while(lo<N&&acc+psd[lo]<.005*tot)acc+=psd[lo++];acc=0;while(hi>0&&acc+psd[hi]<.005*tot)acc+=psd[hi--];
+  const psdDb=Array.from(psd,v=>10*Math.log10(v+1e-15)),sorted=psdDb.slice().sort((a,b)=>a-b);
+  const yr=new Float64Array(ns),yi=new Float64Array(ns);
+  for(let k=0;k<ns;k++){let a=0,b=0;const o=k*sps;for(let j=0;j<L;j++){a+=re[o+j]*h[j];b+=im[o+j]*h[j]}yr[k]=a;yi[k]=b}
+  const zr=new Float64Array(ns),zi=new Float64Array(ns);
+  for(let k=0;k<ns;k++){const s=pts[idx[k]];zr[k]=yr[k]*s[0]+yi[k]*s[1];zi[k]=yi[k]*s[0]-yr[k]*s[1]}
+  let w=0;
+  for(const D of[1,16,256]){if(D>=ns/2)break;let ar=0,ai=0;for(let k=D;k<ns;k++){ar+=zr[k]*zr[k-D]+zi[k]*zi[k-D];ai+=zi[k]*zr[k-D]-zr[k]*zi[k-D]}
+    const c=Math.cos(-w*D),s=Math.sin(-w*D);w+=Math.atan2(ar*s+ai*c,ar*c-ai*s)/D}
+  const cr=new Float64Array(ns),ci=new Float64Array(ns);
+  let gr=0,gi=0,ss=0;
+  for(let k=0;k<ns;k++){const c=Math.cos(-w*k),s=Math.sin(-w*k);cr[k]=yr[k]*c-yi[k]*s;ci[k]=yr[k]*s+yi[k]*c;const t=pts[idx[k]];gr+=cr[k]*t[0]+ci[k]*t[1];gi+=ci[k]*t[0]-cr[k]*t[1];ss+=t[0]*t[0]+t[1]*t[1]}
+  gr/=ss;gi/=ss;const g2=gr*gr+gi*gi||1e-12;let err=0,ser=0;
+  for(let k=0;k<ns;k++){const a=(cr[k]*gr+ci[k]*gi)/g2,b=(ci[k]*gr-cr[k]*gi)/g2;cr[k]=a;ci[k]=b;const t=pts[idx[k]];err+=(a-t[0])**2+(b-t[1])**2;
+    let best=0,bd=1e9;for(let m=0;m<pts.length;m++){const d=(a-pts[m][0])**2+(b-pts[m][1])**2;if(d<bd){bd=d;best=m}}if(best!==idx[k])ser++}
+  const evm=Math.sqrt(err/ss),snrDb=-20*Math.log10(evm+1e-12),fsym=p.fs/sps;
+  return{powerDb:10*Math.log10(pw),paprDb:10*Math.log10(pk/pw),psdDb,obwHz:(hi-lo+1)*p.fs/N,floorDb:sorted[Math.floor(N*.1)],
+    iqGainDb:10*Math.log10(ii/qq),iqPhaseDeg:Math.asin(Math.max(-1,Math.min(1,iq/Math.sqrt(ii*qq))))*180/Math.PI,
+    cfoHz:w/(2*Math.PI)*fsym,evm,snrDb,ser:ser/ns,capBps:fsym*Math.log2(1+Math.pow(10,snrDb/10)),
+    raw:{r:yr,i:yi},cor:{r:cr,i:ci},cls:classify(cr,ci,evm*evm)}}
+
+const MCS=[{name:'BPSK 1/2',snr:4,bps:.5},{name:'QPSK 1/2',snr:7,bps:1},{name:'QPSK 3/4',snr:10,bps:1.5},{name:'16QAM 1/2',snr:13,bps:2},{name:'16QAM 3/4',snr:16,bps:3},{name:'64QAM 2/3',snr:20,bps:4},{name:'64QAM 5/6',snr:24,bps:5}];
+function pickMcs(snr){let m=-1;for(let i=0;i<MCS.length;i++)if(MCS[i].snr<=snr)m=i;return m}
+
+function simPackets(p){const r=rng(p.seed),out=[],S=1<<p.gapBits,ph=r()*6.28,dr=1+p.ppm*1e-6;let t=0;
+  for(let s=0;s<p.n;s++){const sym=p.gapBits?Math.floor(r()*S):0;if(s)t+=(p.intervalMs+sym*p.slotMs)*dr;
+    const rssi=p.rssi+p.fadeDb*Math.sin(2*Math.PI*s/37+ph)+gauss(r)*1.2,interf=r()<p.interf;
+    const floor=p.floor+gauss(r)*.8+(interf?8+r()*8:0),snr=rssi-floor;
+    out.push({seq:s,sym,t:t+gauss(r)*p.jitterMs,rssi,floor,snr,interf,lost:r()<1/(1+Math.exp((snr-6)*1.1))})}
+  return out}
+function analyzePackets(pk,p){const rx=pk.filter(q=>!q.lost),n=pk.length,res={rx:rx.length,n,pdr:rx.length/n,missing:[],iv:[]};
+  if(rx.length<3)return res;
+  let run=0;for(let i=1;i<rx.length;i++){const d=rx[i].seq-rx[i-1].seq;if(d>1){res.missing.push([rx[i-1].seq+1,rx[i].seq-1]);run=Math.max(run,d-1)}}
+  res.longestGap=run;
+  let okPairs=0,pairs=0,gapOk=0;
+  for(let i=1;i<rx.length;i++){const d=rx[i].seq-rx[i-1].seq,dt=rx[i].t-rx[i-1].t;
+    if(d===1){pairs++;res.iv.push({seq:rx[i].seq,dt});
+      if(p.gapBits){const est=Math.max(0,Math.min((1<<p.gapBits)-1,Math.round((dt-p.intervalMs)/p.slotMs)));if(est===rx[i].sym)gapOk++}}}
+  const m=res.iv.reduce((a,b)=>a+b.dt,0)/Math.max(1,res.iv.length);res.meanIv=m;
+  res.jitter=Math.sqrt(res.iv.reduce((a,b)=>a+(b.dt-m)**2,0)/Math.max(1,res.iv.length));
+  if(!p.gapBits){let sx=0,sy=0,sxx=0,sxy=0;for(const q of rx){sx+=q.seq;sy+=q.t;sxx+=q.seq*q.seq;sxy+=q.seq*q.t}
+    const k=rx.length,slope=(k*sxy-sx*sy)/(k*sxx-sx*sx);res.ppm=(slope/p.intervalMs-1)*1e6}
+  res.meanSnr=rx.reduce((a,b)=>a+b.snr,0)/rx.length;
+  let fx=0,ad=0;for(const q of pk){if(q.snr>=7)fx+=1;const i=pickMcs(q.snr);if(i>=0)ad+=MCS[i].bps}
+  res.fixedBps=fx/n;res.adaptBps=ad/n;
+  const span=(pk[n-1].t-pk[0].t)/1000||1;
+  res.baseRate=rx.length*p.payload/((n-1)*p.intervalMs/1000);
+  res.gapRate=(rx.length*p.payload+gapOk*p.gapBits)/span;res.gapOk=gapOk;res.pairs=pairs;
+  return res}
+
+class AE{
+  constructor(M,H,seed){this.M=M;this.H=H;const r=this.r=rng(seed),g=()=>gauss(r);
+    this.E=Float64Array.from({length:2*M},()=>g()*.7);this.W1=Float64Array.from({length:2*H},()=>g()*.8);
+    this.b1=Float64Array.from({length:H},()=>g()*.3);this.W2=Float64Array.from({length:H*M},()=>g()*Math.sqrt(2/H));this.b2=new Float64Array(M);
+    this.P=[this.E,this.W1,this.b1,this.W2,this.b2];this.m=this.P.map(a=>new Float64Array(a.length));this.v=this.P.map(a=>new Float64Array(a.length));this.t=0}
+  points(){const{E,M}=this;let P=0;for(let i=0;i<2*M;i++)P+=E[i]*E[i];const c=1/Math.sqrt(P/M),pts=[];for(let i=0;i<M;i++)pts.push([E[2*i]*c,E[2*i+1]*c]);return pts}
+  forward(y0,y1,hb,pb){const{M,H,W1,b1,W2,b2}=this;
+    for(let j=0;j<H;j++){const a=W1[2*j]*y0+W1[2*j+1]*y1+b1[j];hb[j]=a>0?a:0}
+    let mx=-1e9;for(let m=0;m<M;m++){let a=b2[m];const o=m*H;for(let j=0;j<H;j++)a+=W2[o+j]*hb[j];pb[m]=a;if(a>mx)mx=a}
+    let z=0;for(let m=0;m<M;m++){pb[m]=Math.exp(pb[m]-mx);z+=pb[m]}for(let m=0;m<M;m++)pb[m]/=z}
+  step(B,snr,pa,backoff,lr){const{M,H,E,W1,W2,r}=this;let P=0;for(let i=0;i<2*M;i++)P+=E[i]*E[i];P/=M;const c=1/Math.sqrt(P);
+    const G=this.P.map(a=>new Float64Array(a.length)),gx=new Float64Array(2*M),hb=new Float64Array(H),pb=new Float64Array(M),dh=new Float64Array(H);
+    const sig=Math.sqrt(Math.pow(10,-snr/10)/2),A2=Math.pow(10,backoff/10);let loss=0;
+    for(let b=0;b<B;b++){const i=Math.floor(r()*M),x0=c*E[2*i],x1=c*E[2*i+1];let s=1,ds=0;if(pa)[s,ds]=rapp(x0*x0+x1*x1,A2);
+      const y0=x0*s+gauss(r)*sig,y1=x1*s+gauss(r)*sig;this.forward(y0,y1,hb,pb);loss-=Math.log(pb[i]+1e-12);pb[i]-=1;
+      for(let j=0;j<H;j++)dh[j]=0;
+      for(let m=0;m<M;m++){const d=pb[m],o=m*H;G[4][m]+=d;for(let j=0;j<H;j++){G[3][o+j]+=d*hb[j];dh[j]+=d*W2[o+j]}}
+      let d0=0,d1=0;for(let j=0;j<H;j++){if(hb[j]<=0)continue;const d=dh[j];G[1][2*j]+=d*y0;G[1][2*j+1]+=d*y1;G[2][j]+=d;d0+=d*W1[2*j];d1+=d*W1[2*j+1]}
+      const dot=x0*d0+x1*d1;gx[2*i]+=s*d0+2*ds*dot*x0;gx[2*i+1]+=s*d1+2*ds*dot*x1}
+    let ge=0;for(let i=0;i<2*M;i++)ge+=gx[i]*E[i];const k=ge*Math.pow(P,-1.5)/M;for(let i=0;i<2*M;i++)G[0][i]=c*gx[i]-k*E[i];
+    this.t++;const b1c=1-Math.pow(.9,this.t),b2c=1-Math.pow(.999,this.t);
+    for(let q=0;q<5;q++){const a=this.P[q],g=G[q],m=this.m[q],v=this.v[q];for(let i=0;i<a.length;i++){const gi=g[i]/B;m[i]=.9*m[i]+.1*gi;v[i]=.999*v[i]+.001*gi*gi;a[i]-=lr*(m[i]/b1c)/(Math.sqrt(v[i]/b2c)+1e-8)}}
+    return loss/B}
+  serNeural(n,snr,pa,backoff,r){const pts=this.points(),M=this.M,hb=new Float64Array(this.H),pb=new Float64Array(M),sig=Math.sqrt(Math.pow(10,-snr/10)/2),A2=Math.pow(10,backoff/10);let e=0;
+    for(let k=0;k<n;k++){const i=Math.floor(r()*M),x=pts[i],s=pa?rapp(x[0]*x[0]+x[1]*x[1],A2)[0]:1;this.forward(x[0]*s+gauss(r)*sig,x[1]*s+gauss(r)*sig,hb,pb);
+      let b=0;for(let m=1;m<M;m++)if(pb[m]>pb[b])b=m;if(b!==i)e++}return e/n}}
+function serIdeal(pts,n,snr,pa,backoff,r){const M=pts.length,A2=Math.pow(10,backoff/10),c=pts.map(x=>{const s=pa?rapp(x[0]*x[0]+x[1]*x[1],A2)[0]:1;return[x[0]*s,x[1]*s]}),sig=Math.sqrt(Math.pow(10,-snr/10)/2);let e=0;
+  for(let k=0;k<n;k++){const i=Math.floor(r()*M),y0=c[i][0]+gauss(r)*sig,y1=c[i][1]+gauss(r)*sig;let b=0,bd=1e9;for(let m=0;m<M;m++){const d=(y0-c[m][0])**2+(y1-c[m][1])**2;if(d<bd){bd=d;b=m}}if(b!==i)e++}return e/n}
+function papr(pts){let a=0,p=0;for(const q of pts){const u=q[0]*q[0]+q[1]*q[1];a+=u;if(u>p)p=u}return 10*Math.log10(p/(a/pts.length))}
+
+function pairHash(a,b){let x=Math.min(a,b)*7919+Math.max(a,b)*104729+17;x=Math.imul(x^x>>>15,2246822519);x=Math.imul(x^x>>>13,3266489917);return(x^x>>>16)>>>0}
+function linkSnr(a,b,o){const d=Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)),sh=(pairHash(a.id,b.id)%1000/1000-.5)*8;return o.ptx-(40+10*o.n*Math.log10(d))-sh-o.noise}
+function rateOf(snr,bw){return snr<3?0:bw*Math.min(6,.75*Math.log2(1+Math.pow(10,snr/10)))}
+function route(nodes,src,dst,o){const dist={},prev={},done={};
+  if(o.widest){const wd={};nodes.forEach(n=>wd[n.id]=0);wd[src]=Infinity;
+    for(;;){let u=null;for(const n of nodes)if(!done[n.id]&&wd[n.id]>0&&(u===null||wd[n.id]>wd[u.id]))u=n;if(!u||u.id===dst)break;done[u.id]=1;
+      for(const v of nodes){if(v.id===u.id||done[v.id])continue;const r=rateOf(linkSnr(u,v,o),o.bw);if(r<=0)continue;const c=Math.min(wd[u.id],r)*(1-1e-4);if(c>wd[v.id]){wd[v.id]=c;prev[v.id]=u.id}}}
+    if(!wd[dst])return null;const path=[dst];while(path[0]!==src)path.unshift(prev[path[0]]);return path}
+  nodes.forEach(n=>dist[n.id]=Infinity);dist[src]=0;
+  for(;;){let u=null;for(const n of nodes)if(!done[n.id]&&dist[n.id]<Infinity&&(u===null||dist[n.id]<dist[u.id]))u=n;if(!u||u.id===dst)break;done[u.id]=1;
+    for(const v of nodes){if(v.id===u.id||done[v.id])continue;const r=rateOf(linkSnr(u,v,o),o.bw);if(r<=0)continue;const c=dist[u.id]+1/r;if(c<dist[v.id]){dist[v.id]=c;prev[v.id]=u.id}}}
+  if(dist[dst]===Infinity)return null;const path=[dst];while(path[0]!==src)path.unshift(prev[path[0]]);return path}
+function pathRates(nodes,path,o){const by={};nodes.forEach(n=>by[n.id]=n);const hops=[];
+  for(let i=0;i+1<path.length;i++){const a=by[path[i]],b=by[path[i+1]],snr=linkSnr(a,b,o);hops.push({a:a.id,b:b.id,snr,rate:rateOf(snr,o.bw)})}
+  const segs=[];let cur=[];hops.forEach((h,i)=>{cur.push(h);const end=i===hops.length-1||by[h.b].tier==='master';if(end){let pr=1;for(const q of cur)pr*=1+1/Math.pow(10,q.snr/10);const eff=10*Math.log10(1/(pr-1));segs.push({k:cur.length,snr:eff,rate:rateOf(eff,o.bw)});cur=[]}});
+  let inv=0,mn=Infinity;for(const s of segs){if(s.rate<=0){inv=Infinity;mn=0}else{inv+=s.k/s.rate;mn=Math.min(mn,s.rate)}}
+  return{hops,segs,single:inv===Infinity?0:1/inv,multi:mn===Infinity?0:mn}}
+function csi(a,b,snrDb,nsc){const r=rng(pairHash(a,b)),taps=[[1,0,0],[.55,r()*6.28,1+Math.floor(r()*4)],[.35,r()*6.28,5+Math.floor(r()*5)]],h=[];let mean=0;
+  for(let k=0;k<nsc;k++){let re=0,im=0;for(const t of taps){const ph=t[1]-2*Math.PI*k*t[2]/64;re+=t[0]*Math.cos(ph);im+=t[0]*Math.sin(ph)}h.push(re*re+im*im);mean+=h[k]}
+  mean/=nsc;const lin=Math.pow(10,snrDb/10);return h.map(v=>v/mean*lin)}
+function waterfill(g){const n=g.length;let lo=0,hi=n+1/Math.min(...g)+1;for(let it=0;it<60;it++){const mu=(lo+hi)/2;let s=0;for(const v of g)s+=Math.max(0,mu-1/v);if(s>n)hi=mu;else lo=mu}
+  const p=g.map(v=>Math.max(0,lo-1/v));let cw=0,cf=0;for(let i=0;i<n;i++){cw+=Math.log2(1+p[i]*g[i]);cf+=Math.log2(1+g[i])}return{p,capWf:cw/n,capFlat:cf/n}}
+
+const MODS=['BPSK','QPSK','16QAM','64QAM'];
+function agentInit(seed,nch){return{r:rng(seed),tick:0,nch,ch:Array.from({length:nch},()=>({on:false,rise:0,mod:'QPSK',ema:0,label:null})),plan:null,mcs:null,sumA:0,sumS:0,histA:[],histS:[],occ:[],plans:[],said:{}}}
+function agentTick(S,hops,bw,act,ae,aeCfg){const r=S.r,nch=S.nch,n=hops.length,log=[];S.tick++;
+  S.ch.forEach(c=>{if(c.on){if(r()<.18){c.on=false;c.rise=0;c.label=null}}else if(r()<act){c.on=true;c.rise=6+r()*14;c.mod=MODS[Math.floor(r()*4)]}});
+  const sPlan=hops.map((_,i)=>i%nch),sMcs=hops.map(h=>pickMcs(h.snr-2));
+  const ev=(plan,mcs)=>{let m=Infinity;hops.forEach((h,i)=>{const ok=mcs[i]>=0&&h.snr-S.ch[plan[i]].rise>=MCS[mcs[i]].snr;m=Math.min(m,ok?bw*MCS[mcs[i]].bps:0)});return n?m:0};
+  const tS=ev(sPlan,sMcs),tA=S.plan&&S.plan.length===n?ev(S.plan,S.mcs):tS;
+  S.ch.forEach(c=>{c.ema=.4*c.ema+.6*Math.max(0,c.rise+gauss(r))});
+  const busy=S.ch.map((c,i)=>c.ema>3?i:-1).filter(i=>i>=0);
+  S.said.Scanner=busy.length?'Busy: '+busy.map(i=>'ch'+(i+1)+' +'+S.ch[i].ema.toFixed(0)+' dB').join(', '):'All '+nch+' channels quiet';
+  let cl='Nothing to classify';
+  for(const i of busy){const c=S.ch[i];if(!c.label&&c.on){const p={mod:c.mod,nsym:1024,snr:Math.min(28,10+c.rise),cfo:0,fs:1e6,sps:2,pn:0,iqGain:0,iqPhase:0,pa:false,backoff:0,echo:-40,echoDelay:1,seed:S.tick*31+i};
+      c.label=measure(simulate(p),p).cls.label;cl='ch'+(i+1)+' looks like '+c.label+(c.label===c.mod?' (correct)':' (actually '+c.mod+')');log.push('Classifier: '+cl);break}}
+  S.said.Classifier=cl;
+  const order=S.ch.map((c,i)=>[c.ema,i]).sort((a,b)=>a[0]-b[0]).map(q=>q[1]);
+  S.plan=hops.map((_,i)=>order[i%nch]);
+  S.said.Planner=n?'Hops on '+S.plan.map(i=>'ch'+(i+1)).join(', '):'No route to plan';
+  S.mcs=hops.map((h,i)=>pickMcs(h.snr-S.ch[S.plan[i]].ema-2));
+  S.said.Rate=n?S.mcs.map(i=>i<0?'hold':MCS[i].name).join(' | '):'No hops';
+  if(ae){let l=0;for(let k=0;k<15;k++)l=ae.step(128,aeCfg.snr,aeCfg.pa,aeCfg.backoff,.01);S.said.Waveform='Trained to step '+ae.t+', loss '+l.toFixed(3)}
+  S.sumA+=tA;S.sumS+=tS;S.histA.push(tA);S.histS.push(tS);S.occ.push(S.ch.map(c=>c.rise));S.plans.push(S.plan.slice());
+  for(const a of[S.histA,S.histS,S.occ,S.plans])if(a.length>60)a.shift();
+  S.said.Coordinator='Round '+S.tick+': agents '+(tA/1e6).toFixed(2)+', fixed '+(tS/1e6).toFixed(2)+' Mbit/s';
+  if(tA!==tS)log.push('Coordinator: round '+S.tick+' agents '+(tA/1e6).toFixed(2)+' vs fixed '+(tS/1e6).toFixed(2)+' Mbit/s');
+  if(busy.length&&S.tick%3===0)log.push('Scanner: '+S.said.Scanner);
+  return log}
+return{rng,gauss,fft,constel,simulate,measure,classify,MCS,pickMcs,simPackets,analyzePackets,AE,serIdeal,papr,linkSnr,rateOf,route,pathRates,csi,waterfill,agentInit,agentTick}})();
+//CORE-END
+
+/* ---------- UI helpers ---------- */
+const V={},$=id=>document.getElementById(id);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function ctl(host,defs,cb){const el=$(host);defs.forEach(d=>{const w=document.createElement('div');w.className='ctl';
+  if(d.type==='btn'){w.innerHTML=`<button id="${d.id}" type="button" class="${d.ghost?'ghost':''}">${d.label}</button>`;el.appendChild(w);w.firstChild.addEventListener('click',d.click);return}
+  V[d.id]=d.val;
+  if(d.type==='select')w.innerHTML=`<label for="${d.id}">${d.label}</label><select id="${d.id}">${d.opts.map(o=>`<option${o===d.val?' selected':''}>${o}</option>`).join('')}</select>`;
+  else if(d.type==='check')w.innerHTML=`<label class="chk" for="${d.id}"><input type="checkbox" id="${d.id}"${d.val?' checked':''}>&nbsp;${d.label}</label>`;
+  else w.innerHTML=`<label for="${d.id}">${d.label}<output id="${d.id}_o">${d.val}${d.unit||''}</output></label><input type="range" id="${d.id}" min="${d.min}" max="${d.max}" step="${d.step}" value="${d.val}">`;
+  el.appendChild(w);const inp=w.querySelector('input,select');
+  inp.addEventListener('input',()=>{V[d.id]=d.type==='check'?inp.checked:d.type==='select'?inp.value:+inp.value;if(!d.type)$(d.id+'_o').textContent=V[d.id]+(d.unit||'');cb&&cb(d.id)})})}
+function cv(id){const c=$(id),w=c.clientWidth,h=c.clientHeight;if(!w||!h)return null;const dpr=window.devicePixelRatio||1;
+  if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr)}
+  const g=c.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,w,h);g.fillStyle=css('--bg');g.fillRect(0,0,w,h);return{g,w,h,c}}
+function nice(v){const a=Math.abs(v);return a>=1000?v.toFixed(0):a>=10?v.toFixed(0):a>=1?v.toFixed(1):v.toFixed(2)}
+function plot(id,o){const k=cv(id);if(!k)return;const{g,w,h}=k,L=46,R=10,T=8,B=24,pw=w-L-R,ph=h-T-B;
+  let{xmin,xmax,ymin,ymax}=o;
+  if(ymin===undefined){ymin=Infinity;ymax=-Infinity;for(const s of o.series)for(const v of s.y)if(isFinite(v)){if(v<ymin)ymin=v;if(v>ymax)ymax=v}if(!isFinite(ymin)){ymin=0;ymax=1}const pad=(ymax-ymin)*.08||1;ymin-=pad;ymax+=pad}
+  const X=v=>L+(v-xmin)/(xmax-xmin||1)*pw,Y=v=>T+(1-(v-ymin)/(ymax-ymin||1))*ph;
+  g.font='11px '+css('--mono');g.strokeStyle=css('--line');g.fillStyle=css('--muted');g.lineWidth=1;
+  for(let i=0;i<=4;i++){const yv=ymin+(ymax-ymin)*i/4,y=Y(yv);g.globalAlpha=.6;g.beginPath();g.moveTo(L,y);g.lineTo(w-R,y);g.stroke();g.globalAlpha=1;g.textAlign='right';g.textBaseline='middle';g.fillText(o.pow10?'1e'+yv.toFixed(1):nice(yv),L-5,y)}
+  for(let i=0;i<=4;i++){const xv=xmin+(xmax-xmin)*i/4;g.textAlign=i===0?'left':i===4?'right':'center';g.textBaseline='top';g.fillText(nice(xv),X(xv),h-B+6)}
+  g.save();g.beginPath();g.rect(L,T,pw,ph);g.clip();
+  for(const s of o.series){g.strokeStyle=g.fillStyle=css(s.color);g.lineWidth=s.width||1.5;
+    if(s.dots){for(let i=0;i<s.x.length;i++){if(!isFinite(s.y[i]))continue;g.beginPath();g.arc(X(s.x[i]),Y(s.y[i]),s.dots,0,6.3);g.fill()}}
+    else{g.beginPath();let pen=false;for(let i=0;i<s.x.length;i++){if(!isFinite(s.y[i])){pen=false;continue}const x=X(s.x[i]),y=Y(s.y[i]);pen?g.lineTo(x,y):g.moveTo(x,y);pen=true}g.stroke();
+      if(s.fill){g.lineTo(X(s.x[s.x.length-1]),T+ph);g.lineTo(X(s.x[0]),T+ph);g.globalAlpha=.12;g.fill();g.globalAlpha=1}}}
+  g.restore();return{X,Y}}
+function scatter(id,sets,lim){const k=cv(id);if(!k)return;const{g,w,h}=k,s=Math.min(w,h)/2-8,cx=w/2,cy=h/2,sc=s/lim;
+  g.strokeStyle=css('--line');g.lineWidth=1;g.beginPath();g.moveTo(cx-s,cy);g.lineTo(cx+s,cy);g.moveTo(cx,cy-s);g.lineTo(cx,cy+s);g.stroke();g.strokeRect(cx-s,cy-s,2*s,2*s);
+  g.save();g.beginPath();g.rect(cx-s,cy-s,2*s,2*s);g.clip();
+  for(const q of sets){g.fillStyle=g.strokeStyle=css(q.color);g.globalAlpha=q.alpha||1;g.lineWidth=2;
+    for(let i=0;i<q.n;i++){const x=cx+q.x(i)*sc,y=cy-q.y(i)*sc;g.beginPath();g.arc(x,y,q.r,0,6.3);q.ring?g.stroke():g.fill()}}
+  g.restore();g.globalAlpha=1}
+function tiles(id,arr){$(id).innerHTML=arr.map(t=>`<div class="m ${t.s||''}"><span>${t.k}</span><b>${t.v}</b>${t.h?`<small>${t.h}</small>`:''}</div>`).join('')}
+const fmtRate=b=>b>=1e6?(b/1e6).toFixed(2)+' Mbit/s':b>=1e3?(b/1e3).toFixed(1)+' kbit/s':b.toFixed(0)+' bit/s';
+
+/* ---------- Signal Lab ---------- */
+let sigSeed=1,last=null,wf=[],ae=new Core.AE(16,48,7);
+function runSignal(){const mod=V.sMod,p={mod,pts:mod==='Learned'?ae.points():null,nsym:2048,snr:V.sSnr,cfo:V.sCfo,fs:1e6,sps:4,pn:V.sPn*1e-3,iqGain:V.sIqG,iqPhase:V.sIqP,pa:V.sPa,backoff:V.sBo,echo:V.sEcho,echoDelay:V.sEd,seed:sigSeed};
+  const sig=Core.simulate(p),m=Core.measure(sig,p);last={sig,m,p};wf.unshift(m.psdDb);if(wf.length>70)wf.pop();drawSignal()}
+function drawSignal(){if(!last)return;const{sig,m}=last,N=m.psdDb.length,fx=Array.from({length:N},(_,i)=>(i-N/2)*1e3/N);
+  plot('cSpec',{series:[{x:fx,y:m.psdDb,color:'--accent',fill:true}],xmin:-500,xmax:500,ymin:-75,ymax:-15});
+  const k=cv('cWf');if(k){const{g,w,h}=k,rh=h/70,bw=w/256;for(let r=0;r<wf.length;r++)for(let b=0;b<256;b++){const v=Math.max(wf[r][2*b],wf[r][2*b+1]),t=Math.max(0,Math.min(1,(v+70)/45));if(t<.04)continue;g.globalAlpha=t;g.fillStyle=css(t>.75?'--trace2':'--accent');g.fillRect(b*bw,r*rh,bw+.5,rh+.5)}g.globalAlpha=1}
+  const d=V.sSync?m.cor:m.raw,pts=sig.pts;
+  scatter('cCon',[{n:Math.min(1500,d.r.length),x:i=>d.r[i],y:i=>d.i[i],r:1.3,color:'--accent',alpha:.55},{n:pts.length,x:i=>pts[i][0],y:i=>pts[i][1],r:4,color:'--trace2',ring:true}],1.7);
+  const t=Array.from({length:300},(_,i)=>i);plot('cTime',{series:[{x:t,y:Array.from(sig.re.slice(100,400)),color:'--accent'},{x:t,y:Array.from(sig.im.slice(100,400)),color:'--trace2'}],xmin:0,xmax:299});
+  const evp=m.evm*100;
+  tiles('sigMeas',[
+    {k:'Channel power',v:m.powerDb.toFixed(1)+' dBFS',h:'any radio with RSSI'},
+    {k:'Noise floor',v:m.floorDb.toFixed(1)+' dB/bin',h:'quietest tenth of the spectrum'},
+    {k:'SNR, from known symbols',v:m.snrDb.toFixed(1)+' dB',s:m.snrDb>18?'good':m.snrDb>10?'warn':'crit'},
+    {k:'Error vector magnitude',v:evp.toFixed(1)+' %',s:evp<8?'good':evp<18?'warn':'crit'},
+    {k:'Symbol error rate',v:m.ser?m.ser.toExponential(1):'0 in 2048',s:m.ser<1e-3?'good':m.ser<.05?'warn':'crit'},
+    {k:'Carrier frequency offset',v:m.cfoHz.toFixed(0)+' Hz',h:'set to '+V.sCfo+' Hz'},
+    {k:'Peak to average power',v:m.paprDb.toFixed(1)+' dB'},
+    {k:'Occupied bandwidth, 99%',v:(m.obwHz/1e3).toFixed(0)+' kHz'},
+    {k:'IQ gain imbalance',v:m.iqGainDb.toFixed(2)+' dB',h:'set to '+V.sIqG+' dB'},
+    {k:'IQ phase skew',v:m.iqPhaseDeg.toFixed(1)+'°',h:'set to '+V.sIqP+'°'},
+    {k:'Shannon limit at this SNR',v:fmtRate(m.capBps),h:'250 kHz symbol rate'},
+    {k:'Modulation guess',v:m.cls.label,h:'4th-order cumulant '+m.cls.c42.toFixed(2),s:V.sMod==='Learned'?'':m.cls.label===V.sMod?'good':'crit'}])}
+ctl('sigCtl',[
+  {id:'sMod',label:'Modulation',type:'select',opts:['BPSK','QPSK','16QAM','64QAM','Learned'],val:'16QAM'},
+  {id:'sSnr',label:'SNR per symbol',min:0,max:40,step:1,val:22,unit:' dB'},
+  {id:'sCfo',label:'Frequency offset',min:-2000,max:2000,step:50,val:300,unit:' Hz'},
+  {id:'sPn',label:'Phase noise',min:0,max:10,step:.5,val:0,unit:' mrad'},
+  {id:'sIqG',label:'IQ gain imbalance',min:0,max:3,step:.1,val:0,unit:' dB'},
+  {id:'sIqP',label:'IQ phase skew',min:0,max:15,step:.5,val:0,unit:'°'},
+  {id:'sPa',label:'Power amplifier compression',type:'check',val:false},
+  {id:'sBo',label:'Amplifier headroom',min:-2,max:10,step:.5,val:3,unit:' dB'},
+  {id:'sEcho',label:'Echo level, -40 is off',min:-40,max:-3,step:1,val:-40,unit:' dB'},
+  {id:'sEd',label:'Echo delay',min:1,max:12,step:1,val:3,unit:' samples'},
+  {id:'sSync',label:'Show after frequency and gain correction',type:'check',val:true},
+  {id:'sLive',label:'Live capture',type:'check',val:!reduced},
+  {id:'sNew',label:'New capture',type:'btn',click:()=>{sigSeed++;runSignal()}}],runSignal);
+setInterval(()=>{if(V.sLive&&cur==='signal'&&!document.hidden){sigSeed++;runSignal()}},450);
+
+/* ---------- Packets ---------- */
+let pkSeed=3;
+function runPackets(){const p={n:V.pN,intervalMs:V.pInt,jitterMs:V.pJit,ppm:V.pPpm,rssi:V.pRssi,floor:V.pFloor,fadeDb:V.pFade,interf:V.pIntf,gapBits:V.pGap,slotMs:V.pSlot,payload:V.pPay,seed:pkSeed};
+  const pk=Core.simPackets(p),a=Core.analyzePackets(pk,p),x=pk.map(q=>q.seq);
+  const pl=plot('cPk',{series:[{x,y:pk.map(q=>q.floor),color:'--trace2',width:1.2},{x,y:pk.map(q=>q.lost?NaN:q.rssi),color:'--accent',dots:2},{x,y:pk.map(q=>q.lost?q.rssi:NaN),color:'--crit',dots:3}],xmin:0,xmax:p.n-1});
+  if(a.iv&&a.iv.length)plot('cPkInt',{series:[{x:a.iv.map(q=>q.seq),y:a.iv.map(q=>q.dt),color:'--accent',dots:1.6}],xmin:0,xmax:p.n-1});
+  const gain=a.baseRate?(a.gapRate/a.baseRate-1)*100:0;
+  tiles('pkMeas',[
+    {k:'Delivered',v:a.rx+' of '+a.n+' ('+(a.pdr*100).toFixed(1)+'%)',s:a.pdr>.95?'good':a.pdr>.8?'warn':'crit',h:'counted from serial numbers'},
+    {k:'Missing runs',v:(a.missing?a.missing.length:0)+', longest '+(a.longestGap||0),h:a.missing&&a.missing.length?'first: #'+a.missing[0][0]+(a.missing[0][1]>a.missing[0][0]?' to #'+a.missing[0][1]:''):'none'},
+    {k:'Mean interval',v:a.meanIv?a.meanIv.toFixed(2)+' ms':'n/a',h:'jitter '+(a.jitter?a.jitter.toFixed(2):'0')+' ms'},
+    {k:'Sender clock drift',v:a.ppm!==undefined?a.ppm.toFixed(1)+' ppm':'n/a',h:a.ppm!==undefined?'set to '+p.ppm+' ppm':'not measurable while gaps carry bits'},
+    {k:'Mean SNR, packet over gap',v:a.meanSnr?a.meanSnr.toFixed(1)+' dB':'n/a'},
+    {k:'Rate adaptation from gap SNR',v:a.adaptBps!==undefined?a.adaptBps.toFixed(2)+' bit/symbol':'n/a',h:'fixed QPSK 1/2 gets '+(a.fixedBps||0).toFixed(2),s:a.adaptBps>a.fixedBps?'good':''},
+    {k:'Payload throughput',v:a.baseRate?fmtRate(a.baseRate):'n/a',h:p.payload+' bits per packet'},
+    {k:'With bits in the gap timing',v:p.gapBits?fmtRate(a.gapRate):'off',h:p.gapBits?(gain>=0?'+':'')+gain.toFixed(1)+'% vs payload only, '+a.gapOk+' of '+a.pairs+' gaps read right':'set gap bits above 0',s:p.gapBits?(gain>0?'good':'crit'):''}]);
+  $('pkTable').innerHTML='<tr><th>Serial</th><th>Arrival ms</th><th>RSSI</th><th>Gap floor</th><th>SNR</th><th>Best rate</th><th>Status</th></tr>'+pk.map(q=>{const i=Core.pickMcs(q.snr);return`<tr><td>#${q.seq}</td><td>${q.lost?'':q.t.toFixed(1)}</td><td>${q.lost?'':q.rssi.toFixed(1)}</td><td>${q.floor.toFixed(1)}</td><td>${q.lost?'':q.snr.toFixed(1)}</td><td>${q.lost||i<0?'':Core.MCS[i].name}</td><td><span class="pill ${q.lost?'crit':q.interf?'warn':'good'}">${q.lost?'lost':q.interf?'interference':'ok'}</span></td></tr>`}).join('')}
+ctl('pkCtl',[
+  {id:'pN',label:'Packets',min:50,max:400,step:10,val:200},
+  {id:'pInt',label:'Send interval',min:5,max:200,step:5,val:50,unit:' ms'},
+  {id:'pJit',label:'Timing jitter',min:0,max:5,step:.1,val:.3,unit:' ms'},
+  {id:'pPpm',label:'Sender clock drift',min:-100,max:100,step:5,val:20,unit:' ppm'},
+  {id:'pRssi',label:'Packet power',min:-95,max:-40,step:1,val:-74,unit:' dBm'},
+  {id:'pFloor',label:'Noise floor',min:-105,max:-80,step:1,val:-92,unit:' dBm'},
+  {id:'pFade',label:'Fading depth',min:0,max:15,step:1,val:7,unit:' dB'},
+  {id:'pIntf',label:'Interference chance',min:0,max:.5,step:.02,val:.1},
+  {id:'pPay',label:'Payload',min:64,max:2048,step:64,val:512,unit:' bits'},
+  {id:'pGap',label:'Bits carried by gap timing',min:0,max:4,step:1,val:0},
+  {id:'pSlot',label:'Gap timing slot',min:.5,max:10,step:.5,val:2,unit:' ms'},
+  {id:'pNew',label:'New run',type:'btn',click:()=>{pkSeed++;runPackets()}}],runPackets);
+
+/* ---------- Learned waveform ---------- */
+let aeRun=false,aeLoss=[],aeCurve=null,aeStats=null;
+const aeBase=()=>Core.constel(V.aM==='8'?'8PSK':V.aM==='16'?'16QAM':'64QAM');
+function aeReset(){const M=+V.aM;ae=new Core.AE(M,M===64?96:48,7+M);aeLoss=[];aeCurve=null;aeStats=null;aeEval();drawAe()}
+function aeEval(){const r=Core.rng(99),pts=ae.points(),base=aeBase(),snr=V.aSnr,pa=V.aPa,bo=V.aBo,n=12000;
+  aeStats={neural:ae.serNeural(n,snr,pa,bo,r),ideal:Core.serIdeal(pts,n,snr,pa,bo,r),base:Core.serIdeal(base,n,snr,pa,bo,r),pL:Core.papr(pts),pB:Core.papr(base)};
+  const xs=[],l=[],b=[];for(let s=snr-8;s<=snr+6;s+=2){xs.push(s);const a=Core.serIdeal(pts,8000,s,pa,bo,r),c=Core.serIdeal(base,8000,s,pa,bo,r);l.push(a>0?Math.log10(a):NaN);b.push(c>0?Math.log10(c):NaN)}
+  aeCurve={xs,l,b}}
+function drawAe(){const pts=ae.points(),base=aeBase();
+  scatter('cAe',[{n:base.length,x:i=>base[i][0],y:i=>base[i][1],r:5,color:'--trace2',ring:true},{n:pts.length,x:i=>pts[i][0],y:i=>pts[i][1],r:4.5,color:'--accent'}],2);
+  if(aeCurve)plot('cSer',{series:[{x:aeCurve.xs,y:aeCurve.b,color:'--trace2',width:2},{x:aeCurve.xs,y:aeCurve.l,color:'--accent',width:2}],xmin:aeCurve.xs[0],xmax:aeCurve.xs[aeCurve.xs.length-1],ymin:-4,ymax:0,pow10:true});
+  plot('cLoss',{series:[{x:aeLoss.map((_,i)=>i*5),y:aeLoss.length?aeLoss:[0],color:'--accent'}],xmin:0,xmax:Math.max(100,aeLoss.length*5)});
+  const s=aeStats||{},f=v=>v===undefined?'n/a':v?v.toExponential(2):'0';
+  const rel=s.base?(s.ideal/s.base-1)*100:0;
+  tiles('aeMeas',[
+    {k:'Training steps',v:ae.t,h:aeRun?'training':'paused'},
+    {k:'Loss',v:aeLoss.length?aeLoss[aeLoss.length-1].toFixed(3):'n/a'},
+    {k:'Error rate, learned + neural receiver',v:f(s.neural)},
+    {k:'Error rate, learned + ideal detector',v:f(s.ideal),s:s.base&&s.ideal<s.base?'good':s.base?'warn':'',h:s.base?(rel<=0?Math.abs(rel).toFixed(0)+'% fewer errors than baseline':rel.toFixed(0)+'% more errors than baseline'):''},
+    {k:'Error rate, baseline',v:f(s.base),h:V.aM==='8'?'8-PSK':V.aM+'-QAM'},
+    {k:'Peak to average, learned / baseline',v:s.pL!==undefined?s.pL.toFixed(2)+' / '+s.pB.toFixed(2)+' dB':'n/a'}])}
+function aeLoop(){if(!aeRun)return;if(cur==='waveform'&&!document.hidden){let l=0;const k=+V.aM===64?4:10;for(let i=0;i<k;i++)l=ae.step(256,V.aSnr,V.aPa,V.aBo,.01);if(ae.t%5<k)aeLoss.push(l);if(aeLoss.length>600)aeLoss.shift();if(ae.t%150<k)aeEval();drawAe()}requestAnimationFrame(aeLoop)}
+ctl('aeCtl',[
+  {id:'aM',label:'Points in the constellation',type:'select',opts:['8','16','64'],val:'16'},
+  {id:'aSnr',label:'Training SNR',min:4,max:28,step:1,val:14,unit:' dB'},
+  {id:'aPa',label:'Power amplifier compression',type:'check',val:false},
+  {id:'aBo',label:'Amplifier headroom',min:-2,max:8,step:.5,val:1,unit:' dB'},
+  {id:'aGo',label:'Train / pause',type:'btn',click:()=>{aeRun=!aeRun;if(aeRun)aeLoop();else{aeEval();drawAe()}}},
+  {id:'aStep',label:'Run 200 steps',type:'btn',ghost:true,click:()=>{let l=0;for(let i=0;i<200;i++){l=ae.step(256,V.aSnr,V.aPa,V.aBo,.01);if(i%5===0)aeLoss.push(l)}aeEval();drawAe()}},
+  {id:'aReset',label:'Reset',type:'btn',ghost:true,click:aeReset},
+  {id:'aSend',label:'Use on the Signal tab',type:'btn',ghost:true,click:()=>{$('sMod').value='Learned';V.sMod='Learned';show('signal')}}],id=>{if(id==='aM')aeReset();else{aeEval();drawAe()}});
+
+/* ---------- Mesh ---------- */
+let nodes=[[80,300,'master'],[230,210,'worker'],[380,330,'worker'],[520,205,'worker'],[640,345,'master'],[785,250,'worker'],[450,485,'worker'],[920,300,'master']].map((q,i)=>({id:i,x:q[0],y:q[1],tier:q[2]}));
+let nextId=8,sel=null,mesh={path:null,pr:null},selHop=0,flying=[],pktSeq=1000,delivered=[];
+const mopt=()=>({ptx:V.mPtx,n:V.mN,noise:-106+10*Math.log10(V.mBw),bw:V.mBw*1e6,widest:V.mRoute!=='Least airtime (one frequency)'});
+function fillSel(){for(const id of['mSrc','mDst']){const s=$(id),v=V[id];s.innerHTML=nodes.map(n=>`<option${('N'+n.id)===v?' selected':''}>N${n.id}</option>`).join('');if(!nodes.some(n=>'N'+n.id===v)){V[id]='N'+nodes[id==='mSrc'?0:nodes.length-1].id;s.value=V[id]}}}
+function runMesh(){const o=mopt(),src=+V.mSrc.slice(1),dst=+V.mDst.slice(1),by={};nodes.forEach(n=>by[n.id]=n);
+  mesh.path=src===dst?null:Core.route(nodes,src,dst,o);mesh.pr=mesh.path?Core.pathRates(nodes,mesh.path,o):null;
+  const dsnr=src===dst?0:Core.linkSnr(by[src],by[dst],o),direct=src===dst?0:Core.rateOf(dsnr,o.bw);mesh.direct=direct;
+  if(mesh.pr&&selHop>=mesh.pr.hops.length)selHop=0;
+  const pr=mesh.pr;
+  tiles('meMeas',[
+    {k:'Route',v:mesh.path?mesh.path.map(i=>'N'+i).join(' → '):'no route',s:mesh.path?'good':'crit',h:pr?pr.hops.length+' hops, '+pr.segs.length+' decode stages':'move nodes closer or raise power'},
+    {k:'Direct link, no relays',v:direct?fmtRate(direct):'out of range',h:'SNR '+dsnr.toFixed(1)+' dB',s:direct?'':'crit'},
+    {k:'Mesh on one frequency',v:pr?fmtRate(pr.single):'n/a',h:'hops take turns on air'},
+    {k:'Mesh, each hop on its own frequency',v:pr?fmtRate(pr.multi):'n/a',s:pr&&pr.multi>direct?'good':'',h:pr&&pr.single?(pr.multi/pr.single).toFixed(1)+'× the one-frequency rate':''},
+    {k:'Weakest decode stage',v:pr?Math.min(...pr.segs.map(s=>s.snr)).toFixed(1)+' dB':'n/a',h:'worker relays pass their noise along'}]);
+  drawMesh();drawCsi()}
+function drawCsi(){const pr=mesh.pr;if(!pr){$('csiTitle').textContent='Channel state on a hop';tiles('csiMeas',[{k:'No route',v:'n/a'}]);cv('cCsi');return}
+  const h=pr.hops[selHop],g=Core.csi(h.a,h.b,h.snr,48),wfl=Core.waterfill(g),x=g.map((_,i)=>i);
+  $('csiTitle').textContent='Channel state, hop N'+h.a+' → N'+h.b+' (click a hop on the field)';
+  const gd=g.map(v=>10*Math.log10(v)),mx=Math.max(...gd),mn=Math.min(...gd);
+  plot('cCsi',{series:[{x,y:wfl.p.map(v=>mn+v/Math.max(...wfl.p)*(mx-mn)*.6),color:'--trace2',fill:true},{x,y:gd,color:'--accent',width:2}],xmin:0,xmax:47,ymin:mn-2,ymax:mx+2});
+  const o=mopt();
+  tiles('csiMeas',[{k:'Deepest notch',v:(mx-mn).toFixed(1)+' dB below peak'},{k:'Equal power on every subcarrier',v:fmtRate(wfl.capFlat*o.bw)},{k:'Water-filled power',v:fmtRate(wfl.capWf*o.bw),s:'good',h:'+'+((wfl.capWf/wfl.capFlat-1)*100).toFixed(1)+'% at the Shannon limit'}])}
+function meshXY(k){return{sx:k.w/1000,sy:k.h/600}}
+function drawMesh(){const k=cv('cMesh');if(!k)return;const{g,w,h}=k,{sx,sy}=meshXY(k),o=mopt(),by={};nodes.forEach(n=>by[n.id]=n);
+  g.lineWidth=1;for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const s=Core.linkSnr(nodes[i],nodes[j],o);if(s<3)continue;g.strokeStyle=css('--line');g.globalAlpha=Math.min(1,.25+s/40);g.beginPath();g.moveTo(nodes[i].x*sx,nodes[i].y*sy);g.lineTo(nodes[j].x*sx,nodes[j].y*sy);g.stroke()}
+  g.globalAlpha=1;g.font='11px '+css('--mono');
+  if(mesh.pr)mesh.pr.hops.forEach((q,i)=>{const a=by[q.a],b=by[q.b];g.strokeStyle=css(i===selHop?'--trace2':'--accent');g.lineWidth=3;g.beginPath();g.moveTo(a.x*sx,a.y*sy);g.lineTo(b.x*sx,b.y*sy);g.stroke();
+    g.fillStyle=css('--ink');g.textAlign='center';g.fillText('f'+(i+1)+' '+q.snr.toFixed(0)+' dB',(a.x+b.x)/2*sx,(a.y+b.y)/2*sy-7)});
+  for(const n of nodes){const x=n.x*sx,y=n.y*sy,r=n.tier==='master'?10:7;g.fillStyle=css('--panel');g.strokeStyle=css(sel===n.id?'--trace2':'--ink');g.lineWidth=sel===n.id?3:1.8;
+    g.beginPath();n.tier==='master'?g.rect(x-r,y-r,2*r,2*r):g.arc(x,y,r,0,6.3);g.fill();g.stroke();g.fillStyle=css('--ink');g.textAlign='center';g.fillText('N'+n.id,x,y+r+13)}
+  for(const f of flying){if(!mesh.pr)break;const hp=mesh.pr.hops[Math.min(f.hop,mesh.pr.hops.length-1)];if(!hp)continue;const a=by[hp.a],b=by[hp.b];if(!a||!b)continue;const x=(a.x+(b.x-a.x)*f.t)*sx,y=(a.y+(b.y-a.y)*f.t)*sy;g.fillStyle=css('--trace2');g.beginPath();g.arc(x,y,5,0,6.3);g.fill();g.fillStyle=css('--ink');g.fillText('#'+f.seq,x,y-9)}}
+function flyLoop(){if(!flying.length)return;const pr=mesh.pr;if(!pr){flying=[];return}
+  for(const f of flying){if(f.wait>0){f.wait--;continue}f.t+=reduced?1:.06;if(f.t>=1){const hp=pr.hops[f.hop];if(!hp){f.done=true;continue}f.snrs.push(hp.snr);if(Math.random()<1/(1+Math.exp((hp.snr-3)*1.1))){f.lostAt=f.hop+1;f.done=true}else{f.hop++;f.t=0;if(f.hop>=pr.hops.length)f.done=true}}}
+  flying.filter(f=>f.done).forEach(f=>{const worst=pr.hops.reduce((a,b)=>a.snr<b.snr?a:b),g=Core.csi(worst.a,worst.b,worst.snr,48),gd=g.map(v=>10*Math.log10(v));
+    delivered.unshift({seq:f.seq,ok:!f.lostAt,lostAt:f.lostAt,hops:f.snrs.length,min:Math.min(...f.snrs),notch:Math.max(...gd)-Math.min(...gd),mcs:Core.pickMcs(Math.min(...f.snrs)-2)})});
+  flying=flying.filter(f=>!f.done);if(delivered.length>40)delivered.length=40;drawTable();drawMesh();if(flying.length)requestAnimationFrame(flyLoop)}
+function drawTable(){$('meTable').innerHTML='<tr><th>Serial</th><th>Hops</th><th>Weakest SNR</th><th>CSI notch</th><th>Rate advice</th><th>Result</th></tr>'+(delivered.length?delivered.map(d=>`<tr><td>#${d.seq}</td><td>${d.hops}</td><td>${d.min.toFixed(1)} dB</td><td>${d.notch.toFixed(1)} dB</td><td>${d.mcs<0?'hold':Core.MCS[d.mcs].name}</td><td><span class="pill ${d.ok?'good':'crit'}">${d.ok?'delivered':'lost at hop '+d.lostAt}</span></td></tr>`).join(''):'<tr><td colspan="6">Press Send 6 packets.</td></tr>')}
+ctl('meCtl',[
+  {id:'mSrc',label:'Source',type:'select',opts:['N0'],val:'N0'},
+  {id:'mDst',label:'Destination',type:'select',opts:['N7'],val:'N7'},
+  {id:'mRoute',label:'Route for',type:'select',opts:['Strongest weakest hop (many frequencies)','Least airtime (one frequency)'],val:'Strongest weakest hop (many frequencies)'},
+  {id:'mPtx',label:'Transmit power',min:0,max:27,step:1,val:14,unit:' dBm'},
+  {id:'mN',label:'Path-loss exponent',min:2,max:4,step:.1,val:2.8},
+  {id:'mBw',label:'Bandwidth per hop',min:1,max:20,step:1,val:1,unit:' MHz'},
+  {id:'mSend',label:'Send 6 packets',type:'btn',click:()=>{if(!mesh.pr)return;const was=flying.length;for(let i=0;i<6;i++)flying.push({seq:pktSeq++,hop:0,t:0,wait:i*8,snrs:[]});if(!was)flyLoop()}},
+  {id:'mAddW',label:'Add worker',type:'btn',ghost:true,click:()=>{nodes.push({id:nextId++,x:200+Math.random()*600,y:100+Math.random()*400,tier:'worker'});fillSel();runMesh()}},
+  {id:'mAddM',label:'Add master',type:'btn',ghost:true,click:()=>{nodes.push({id:nextId++,x:200+Math.random()*600,y:100+Math.random()*400,tier:'master'});fillSel();runMesh()}},
+  {id:'mTog',label:'Switch selected: worker / master',type:'btn',ghost:true,click:()=>{const n=nodes.find(q=>q.id===sel);if(n){n.tier=n.tier==='master'?'worker':'master';runMesh()}}},
+  {id:'mDel',label:'Remove selected',type:'btn',ghost:true,click:()=>{if(sel===null||nodes.length<=2)return;nodes=nodes.filter(q=>q.id!==sel);sel=null;flying=[];fillSel();runMesh()}}],runMesh);
+(()=>{const c=$('cMesh');let drag=null,moved=false;
+  const pos=e=>{const r=c.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*1000,y:(e.clientY-r.top)/r.height*600}};
+  c.addEventListener('pointerdown',e=>{const p=pos(e);moved=false;let best=null,bd=40;for(const n of nodes){const d=Math.hypot(n.x-p.x,n.y-p.y);if(d<bd){bd=d;best=n}}
+    if(best){drag=best;sel=best.id;c.setPointerCapture(e.pointerId)}else if(mesh.pr){const by={};nodes.forEach(n=>by[n.id]=n);let bh=-1,hd=30;mesh.pr.hops.forEach((h,i)=>{const a=by[h.a],b=by[h.b],d=Math.hypot((a.x+b.x)/2-p.x,(a.y+b.y)/2-p.y);if(d<hd*3&&d<Math.hypot(a.x-b.x,a.y-b.y)/2){if(bh<0||d<hd){bh=i;hd=d}}});if(bh>=0){selHop=bh;drawCsi()}}
+    drawMesh()});
+  c.addEventListener('pointermove',e=>{if(!drag)return;const p=pos(e);drag.x=Math.max(15,Math.min(985,p.x));drag.y=Math.max(15,Math.min(585,p.y));moved=true;runMesh()});
+  c.addEventListener('pointerup',()=>{drag=null})})();
+
+/* ---------- Agents ---------- */
+let AG=Core.agentInit(5,8),agRun=false,agTimer=null,agLog=[];
+const AGN=[['Scanner','Sweeps all 8 channels and posts the noise rise on each.'],['Classifier','Captures a busy channel and names the modulation.'],['Planner','Moves each hop to the quietest channels.'],['Rate','Picks the densest safe modulation per hop.'],['Waveform','Keeps training the learned constellation.'],['Coordinator','Scores each round against the fixed plan.']];
+function agStep(){if(!mesh.pr){agLog.unshift('No route. Set one up on the Mesh tab first.');drawAgents();return}
+  const lines=Core.agentTick(AG,mesh.pr.hops,V.mBw*1e6,V.gAct,V.gWave?ae:null,{snr:V.aSnr,pa:V.aPa,backoff:V.aBo});
+  for(const l of lines)agLog.unshift('['+String(AG.tick).padStart(3,'0')+'] '+l);if(agLog.length>80)agLog.length=80;drawAgents()}
+function drawAgents(){const a=AG.sumA,s=AG.sumS,t=Math.max(1,AG.tick),gain=s?(a/s-1)*100:0;
+  tiles('agMeas',[{k:'Rounds',v:AG.tick,h:agRun?'running':'paused'},{k:'Agents, average',v:fmtRate(a/t),s:a>s?'good':''},{k:'Fixed plan, average',v:fmtRate(s/t)},{k:'Difference',v:(gain>=0?'+':'')+gain.toFixed(1)+'%',s:gain>0?'good':gain<0?'crit':'',h:'same route, same interference'}]);
+  $('agCards').innerHTML=AGN.map(q=>`<div class="ag"><b>${q[0]}</b><p>${AG.said[q[0]]||q[1]}</p></div>`).join('');
+  $('agLog').textContent=agLog.length?agLog.join('\n'):'Press Run or Step. Agents post here when something changes.';
+  const k=cv('cOcc');if(k){const{g,w,h}=k,cw=w/60,rh=h/8;g.font='10px '+css('--mono');
+    AG.occ.forEach((row,i)=>row.forEach((v,c)=>{if(v>0){g.globalAlpha=Math.min(1,.25+v/20);g.fillStyle=css('--crit');g.fillRect(i*cw,c*rh,cw+.5,rh-1)}}));g.globalAlpha=1;
+    AG.plans.forEach((pl,i)=>{g.fillStyle=css('--accent');for(const c of pl){g.beginPath();g.arc(i*cw+cw/2,c*rh+rh/2,Math.min(cw,rh)/3.2,0,6.3);g.fill()}});
+    g.fillStyle=css('--muted');g.textAlign='left';g.textBaseline='middle';for(let c=0;c<8;c++)g.fillText('ch'+(c+1),w-26,c*rh+rh/2)}
+  const x=AG.histA.map((_,i)=>i);plot('cAg',{series:[{x,y:AG.histS.length?AG.histS.map(v=>v/1e6):[0],color:'--trace2',width:2},{x,y:AG.histA.length?AG.histA.map(v=>v/1e6):[0],color:'--accent',width:2}],xmin:0,xmax:59,ymin:0,ymax:Math.max(1,...AG.histA.map(v=>v/1e6),...AG.histS.map(v=>v/1e6))*1.15})}
+ctl('agCtl',[
+  {id:'gAct',label:'Interference activity',min:0,max:.3,step:.01,val:.08},
+  {id:'gWave',label:'Waveform agent trains in the loop',type:'check',val:false},
+  {id:'gRun',label:'Run / pause',type:'btn',click:()=>{agRun=!agRun;clearInterval(agTimer);if(agRun)agTimer=setInterval(()=>{if(cur==='agents'&&!document.hidden)agStep()},350);drawAgents()}},
+  {id:'gStep',label:'Step one round',type:'btn',ghost:true,click:agStep},
+  {id:'gReset',label:'Reset',type:'btn',ghost:true,click:()=>{AG=Core.agentInit(5+Math.floor(Math.random()*1e4),8);agLog=[];drawAgents()}}],null);
+
+/* ---------- Tabs ---------- */
+const TABS=[['signal','Signal Lab'],['packets','Packets and Gaps'],['modem','Modem'],['messages','Messages'],['waveform','Learned Waveform'],['mesh','Mesh'],['agents','Agents'],['hardware','Hardware']];
+let cur='signal';
+const redraw={modem:()=>window.drawModem&&drawModem(),messages:()=>window.drawMessages&&drawMessages(),signal:drawSignal,packets:runPackets,waveform:drawAe,mesh:()=>{runMesh();drawTable()},agents:drawAgents,hardware:()=>{}};
+function show(id){if(!TABS.some(t=>t[0]===id))id='signal';cur=id;for(const t of TABS){$(t[0]).classList.toggle('on',t[0]===id);$('tab_'+t[0]).setAttribute('aria-selected',t[0]===id)}
+  try{if(location.hash.slice(1)!==id)location.hash=id}catch(e){}requestAnimationFrame(()=>redraw[id]())}
+$('tabs').innerHTML=TABS.map(t=>`<button role="tab" id="tab_${t[0]}" type="button">${t[1]}</button>`).join('');
+TABS.forEach(t=>$('tab_'+t[0]).addEventListener('click',()=>show(t[0])));
+addEventListener('hashchange',()=>{const h=location.hash.slice(1);if(h&&h!==cur)show(h)});
+addEventListener('resize',()=>redraw[cur]());
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>redraw[cur]());
+new MutationObserver(()=>redraw[cur]()).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+fillSel();for(let i=0;i<14;i++){sigSeed++;runSignal()}aeEval();
+// Pre-run the agents a little so the tab opens in a working state.
+(()=>{const o=mopt(),p=Core.route(nodes,0,7,o);if(p){mesh.path=p;mesh.pr=Core.pathRates(nodes,p,o);for(let i=0;i<40;i++){const l=Core.agentTick(AG,mesh.pr.hops,1e6,.08,null,{});for(const s of l)agLog.unshift('['+String(AG.tick).padStart(3,'0')+'] '+s)}agLog.length=Math.min(agLog.length,80)}})();
+show(location.hash.slice(1)||'signal');
+</script>
+<script src="link.js"></script>
+</body>
+</html>
